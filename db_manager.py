@@ -47,7 +47,20 @@ create_table_query = """
         user_id INTEGER PRIMARY KEY AUTOINCREMENT,
         tg_username TEXT NOT NULL,
         user_name TEXT,
-        login_time DATETIME NOT NULL 
+        login_time DATETIME 
+    );
+
+    CREATE TABLE IF NOT EXISTS list_suggestions (
+        suggestion_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_type TEXT,
+        product_name TEXT,
+        product_supplier TEXT,
+        product_calories INTEGER,
+        product_proteins REAL,
+        product_carbs REAL,
+        product_sugars REAL,
+        product_fats REAL,
+        product_fiber REAL
     );
 """
 
@@ -67,6 +80,14 @@ def create_tables_db(cursor):
     if is_table_empty(cursor, 'product_types'):
         for product_type in product_types:
             cursor.execute("INSERT INTO product_types (type_name) VALUES (?)", (product_type,))
+
+def suggest_adding_product(cursor, tuple_to_write):
+    cursor.execute("""
+                   INSERT INTO list_suggestions (product_type, product_name, 
+                   product_supplier, product_calories, product_proteins,
+                   product_carbs, product_sugars, product_fats, product_fiber)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, tuple_to_write)
 
 
 

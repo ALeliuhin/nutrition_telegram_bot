@@ -9,9 +9,11 @@ bot = telebot.TeleBot(BOT_TOKEN)
 
 if __name__ == '__main__' :
 
+    suggest_product_ansewers = {}
+
     @bot.message_handler(commands=['start'])
     def start_command(message):
-        bot.send_message(message.chat.id, f'Welcome, {message.from_user.first_name}! Use the /menu button below to access the menu:')
+        bot.send_message(message.chat.id, f'Welcome, {message.from_user.username}! Use the /menu button below to access the menu:')
         connection = db_manager.connect_to_db()
         cursor = connection.cursor()
         db_manager.create_tables_db(cursor)
@@ -52,7 +54,66 @@ if __name__ == '__main__' :
     @bot.callback_query_handler(func=lambda call: True)
     def answer(callback):
         if callback.message:
-            if callback.data == 'choice_search':
-                bot.answer_callback_query(callback.id, 'Great choice!')
+            if callback.data == 'choice_suggest':
+                markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+                for type in db_manager.product_types:
+                    markup.add(type)
+                bot.send_message(callback.message.chat.id, "Please choose the product's type:", reply_markup=markup)
+                bot.register_next_step_handler(callback.message, input_name)
+
+    ### Suggest a product
+
+    def input_name(message):
+        suggest_product_ansewers['type'] = message.text
+        bot.send_message(message.chat.id, 'Please input the name of the product:')
+        bot.register_next_step_handler(message, input_suppliers_name)
+
+    def input_suppliers_name(message):
+        suggest_product_ansewers['name'] = message.text.capitalize()
+        bot.send_message(message.chat.id, "Specify the supplier's company name")
+        bot.register_next_step_handler(message, input_calories)
+
+    def input_calories(message):
+        suggest_product_ansewers['supplier'] = message.text.capitalize()
+        bot.send_message(message.chat.id, "Input the amount of calories of the product per 100g")
+        bot.register_next_step_handler(message, process_calories_data)
+
+    def process_calories_data(message):
+        try:
+            suggest_product_ansewers['calories'] = int(message.text)
+        except ValueError:
+            bot.send_message(message.chat.id, "The value must be numerical")
+            return
+        bot.send_message(message.chat.id, 
+                'Input the amount of <b>Proteins, Carbs, Sugars, Fats and Fiber </b>'
+                'separated by spaces, e.g., <b>21 30 17 4 0</b>', parse_mode="HTML"
+        )
+        bot.register_next_step_handler(message, input_nutrition_data)
+
+    def input_nutrition_data(message):
+        nutrients = message.text.split()
+        if len(nutrients) != 5:
+            bot.send_message(message.chat.id, "Something is wrong in your data. Please try again.")
+            return
+        try:
+            nutrients = list(map(float, nutrients))
+            proteins, carbs, sugars, fats, fiber = nutrients
+        except ValueError:
+            bot.send_message(message.chat.id, "Please enter valid numeric values for nutrients.")
+            return
+        
+        product_type = suggest_product_ansewers['type']
+        product_name = suggest_product_ansewers['name']
+        product_supplier = suggest_product_ansewers['supplier']
+        product_calories = suggest_product_ansewers['calories']
+
+        product_tuple = (product_type, product_name, product_supplier, product_calories, proteins, carbs, sugars, fats, fiber)
+        connection = db_manager.connect_to_db()
+        cursor = connection.cursor()
+        db_manager.suggest_adding_product(cursor, product_tuple)
+        connection.commit()
+        connection.close()
+
+        bot.send_message(message.chat.id, "<b>Success! The admin has been notified, please wait for approval.</b>", parse_mode="HTML")
 
     bot.infinity_polling()
