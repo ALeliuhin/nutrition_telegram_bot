@@ -179,20 +179,14 @@ if __name__ == '__main__' :
 
     def grant_privileges(message):
         users_to_be_granted = message.text.split()
-        
-        # Fetch current users from the database
-        current_users = {user[0] for user in admin.AdminInterface.inspect_login_data()}  # Using set for quick lookup
-        
-        # Filter out any usernames that do not exist
+        current_users = {user[0] for user in admin.AdminInterface.inspect_login_data()}
         valid_users = [user for user in users_to_be_granted if user in current_users]
         
         if not valid_users:
             bot.send_message(message.chat.id, "Error: No valid usernames found in the database.")
             return
-        
-        # Grant privileges to valid users
         result = admin.AdminInterface.grant_privileges(valid_users)
-        
+
         if result:
             bot.send_message(message.chat.id, "Privileges granted to the following users: " + ", ".join(valid_users))
         else:
