@@ -1,9 +1,9 @@
 import telebot
 from telebot import types
-import db_manager
+import db_manager, admin
 from datetime import datetime
 
-BOT_TOKEN = "INSERT HERE"
+BOT_TOKEN = "7779751302:AAFKe1dTIFLyr4tCMA7DTkqi_3MYMTqdoAc"
 bot = telebot.TeleBot(BOT_TOKEN)
 
 
@@ -13,11 +13,16 @@ if __name__ == '__main__' :
 
     @bot.message_handler(commands=['start'])
     def start_command(message):
-        bot.send_message(message.chat.id, f'Welcome, {message.from_user.username}! Use the /menu button below to access the menu:')
+        markup_remove = types.ReplyKeyboardRemove()
+        bot.send_message(message.chat.id, f'Welcome, {message.from_user.username}! Use the /menu button below to access the menu:', reply_markup=markup_remove)
         connection = db_manager.connect_to_db()
         cursor = connection.cursor()
         db_manager.create_tables_db(cursor)
-        db_manager.add_user_to_db(cursor, f'@{message.from_user.username}', message.from_user.first_name, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        db_manager.add_user_to_db(cursor, f'@{message.from_user.username}', message.from_user.first_name, 
+                            "admin" if message.from_user.username == "olegovich_la" else "user", 
+                            datetime.now().strftime('%Y-%m-%d %H:%M:%S'
+        )
+)
         connection.commit()
         connection.close()
         
@@ -39,7 +44,7 @@ if __name__ == '__main__' :
         )       
 
     @bot.message_handler(commands=['menu'])
-    def question(message):
+    def main_menu_interface(message):
         markup = types.InlineKeyboardMarkup(row_width=2)
 
         search = types.InlineKeyboardButton('Search for a product', callback_data='choice_search')
@@ -51,8 +56,8 @@ if __name__ == '__main__' :
 
         bot.send_message(message.chat.id, '<b>Welcome to the Main Menu</b>', parse_mode= "HTML", reply_markup=markup)
 
-    @bot.callback_query_handler(func=lambda call: True)
-    def answer(callback):
+    @bot.callback_query_handler(func=lambda call: call.data in ['choice_search', 'choice_select', 'choice_suggest', 'choice_modify'])
+    def answer_main_menu(callback):
         if callback.message:
             if callback.data == 'choice_suggest':
                 markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
@@ -60,12 +65,16 @@ if __name__ == '__main__' :
                     markup.add(type)
                 bot.send_message(callback.message.chat.id, "Please choose the product's type:", reply_markup=markup)
                 bot.register_next_step_handler(callback.message, input_name)
+            elif callback.data == 'choice_modify':
+                bot.send_message(callback.message.chat.id, "Enter admin password:")
+                bot.register_next_step_handler(callback.message, check_admin_password)
 
     ### Suggest a product
 
     def input_name(message):
         suggest_product_ansewers['type'] = message.text
-        bot.send_message(message.chat.id, 'Please input the name of the product:')
+        markup_remove = types.ReplyKeyboardRemove()
+        bot.send_message(message.chat.id, 'Please input the name of the product:', reply_markup=markup_remove)
         bot.register_next_step_handler(message, input_suppliers_name)
 
     def input_suppliers_name(message):
@@ -107,7 +116,11 @@ if __name__ == '__main__' :
         product_supplier = suggest_product_ansewers['supplier']
         product_calories = suggest_product_ansewers['calories']
 
-        product_tuple = (product_type, product_name, product_supplier, product_calories, proteins, carbs, sugars, fats, fiber)
+        product_tuple = (f'@{message.from_user.username}', 
+                        product_type, product_name, 
+                        product_supplier, product_calories, 
+                        proteins, carbs, sugars, fats, fiber
+        )
         connection = db_manager.connect_to_db()
         cursor = connection.cursor()
         db_manager.suggest_adding_product(cursor, product_tuple)
@@ -115,5 +128,76 @@ if __name__ == '__main__' :
         connection.close()
 
         bot.send_message(message.chat.id, "<b>Success! The admin has been notified, please wait for approval.</b>", parse_mode="HTML")
+        
+    ### Modify data (admin privileges only)
+
+    def check_admin_password(message):
+        users = admin.AdminInterface.check_admins()
+        if message.text == admin.password and f"@{message.from_user.username}" in users:
+            bot.reply_to(message, "Access granted!")
+            markup = types.InlineKeyboardMarkup(row_width=2)
+
+            inspect_suggestions = types.InlineKeyboardButton('Inspect current suggestions', callback_data='inspect_suggestions')
+            delete_product = types.InlineKeyboardButton('Delete a product', callback_data='delete_product')
+            grant_privileges = types.InlineKeyboardButton('Grant privileges', callback_data='grant_privileges')
+            
+            markup.add(inspect_suggestions, delete_product, grant_privileges)
+
+            bot.send_message(message.chat.id, "<b>Select one of the options:</b>", parse_mode="HTML", reply_markup=markup)
+        else:
+            bot.reply_to(message, "Wrong password or lack of privileges. Please try again.")
+            return
+    
+    @bot.callback_query_handler(func=lambda call : call.data in ['inspect_suggestions', 'delete_product', 'grant_privileges'])
+    def answer_admin_menu(callback):
+        if callback.message:
+            if callback.data == 'inspect_suggestions':
+                list_suggestions = admin.AdminInterface.check_database_for_suggestion()
+                if len(list_suggestions) == 0:
+                    bot.answer_callback_query(callback.id, "No suggestions found.", show_alert=True)
+                    return 
+                markup = types.InlineKeyboardMarkup(row_width=2)
+                for suggestion in list_suggestions:
+                    suggestion_id = suggestion[0]
+                    product_type = suggestion[2]
+                    product_name = suggestion[3]
+                    product_supplier = suggestion[4]
+                    button_text = f'{product_type}: {product_name} by "{product_supplier}"'
+                    markup.add(types.InlineKeyboardButton(button_text, callback_data=f"approve_{suggestion_id}"))
+                bot.send_message(callback.message.chat.id, "<b>Please review the following suggestions:</b>", parse_mode="HTML", reply_markup=markup)
+            
+            if callback.data == 'grant_privileges':
+                users = admin.AdminInterface.inspect_login_data()
+                response = "<b>Login Data:</b>\n\n"
+                for user in users:
+                    tg_username, privilege = user 
+                    response += f"Username: {tg_username}, Privilege: {privilege}\n"
+                
+                bot.send_message(callback.message.chat.id, response, parse_mode="HTML")
+                bot.send_message(callback.message.chat.id, "Type in manually usernames to grant privilege 'admin', separated by spaces & including '@'")
+                bot.register_next_step_handler(callback.message, grant_privileges)
+
+    def grant_privileges(message):
+        users_to_be_granted = message.text.split()
+        
+        # Fetch current users from the database
+        current_users = {user[0] for user in admin.AdminInterface.inspect_login_data()}  # Using set for quick lookup
+        
+        # Filter out any usernames that do not exist
+        valid_users = [user for user in users_to_be_granted if user in current_users]
+        
+        if not valid_users:
+            bot.send_message(message.chat.id, "Error: No valid usernames found in the database.")
+            return
+        
+        # Grant privileges to valid users
+        result = admin.AdminInterface.grant_privileges(valid_users)
+        
+        if result:
+            bot.send_message(message.chat.id, "Privileges granted to the following users: " + ", ".join(valid_users))
+        else:
+            bot.send_message(message.chat.id, "Error: Some usernames may not exist or there was an issue granting privileges.")
+
+
 
     bot.infinity_polling()
