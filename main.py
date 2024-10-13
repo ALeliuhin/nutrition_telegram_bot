@@ -3,7 +3,7 @@ from telebot import types
 import db_manager, admin
 from datetime import datetime
 
-BOT_TOKEN = "7779751302:AAFKe1dTIFLyr4tCMA7DTkqi_3MYMTqdoAc"
+BOT_TOKEN = "INSERT HERE"
 bot = telebot.TeleBot(BOT_TOKEN)
 
 
