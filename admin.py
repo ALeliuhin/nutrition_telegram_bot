@@ -1,5 +1,6 @@
 import db_manager
-password = "freakycomplexpwd"
+import os
+password = os.getenv("ADMIN_PWD")
 
 class AdminInterface():
 
@@ -61,3 +62,66 @@ class AdminInterface():
                 connection.close()
                 return success
 
+        @staticmethod
+        def add_selected_suggestions(selected_ids):
+                connection = db_manager.connect_to_db()
+                cursor = connection.cursor()
+
+                for suggestion_id in selected_ids:
+                        try:
+                                current_suggestion = cursor.execute("""
+                                        SELECT * FROM list_suggestions
+                                        WHERE suggestion_id = ?;
+                                """, (suggestion_id,)).fetchone()
+
+                                if current_suggestion is None:
+                                        continue
+
+                                product_type_name = current_suggestion[2]
+                                product_name = current_suggestion[3]
+                                product_supplier_name = current_suggestion[4]
+                                product_calories = current_suggestion[5]
+                                product_proteins = current_suggestion[6]
+                                product_carbs = current_suggestion[7]
+                                product_sugars = current_suggestion[8]
+                                product_fats = current_suggestion[9]
+                                product_fiber = current_suggestion[10]
+
+
+                                product_type_id = cursor.execute("""
+                                        SELECT type_id FROM product_types WHERE type_name = ?;
+                                """, (product_type_name,)).fetchone()[0]
+
+                                cursor.execute("""
+                                        INSERT OR IGNORE INTO suppliers (supplier_name)
+                                        VALUES (?);
+                                """, (product_supplier_name,))
+
+                                product_supplier_id = cursor.execute("""
+                                        SELECT supplier_id FROM suppliers WHERE supplier_name = ?;
+                                """, (product_supplier_name,)).fetchone()[0]
+
+                                cursor.execute("""
+                                        INSERT INTO products (product_name, product_type, product_supplier, calories)
+                                        VALUES (?, ?, ?, ?);
+                                """, (product_name, product_type_id, product_supplier_id, product_calories))
+
+                                product_id = cursor.lastrowid
+
+                                cursor.execute("""
+                                        INSERT INTO nutrition_info (product_id, proteins, carbos, sugars, fats, fiber)
+                                        VALUES (?, ?, ?, ?, ?, ?);
+                                """, (product_id, product_proteins, product_carbs, product_sugars, product_fats, product_fiber))
+
+                                cursor.execute("""
+                                        DELETE FROM list_suggestions WHERE suggestion_id = ?;
+                                """, (suggestion_id,))
+
+                                connection.commit()
+                                return True
+
+                        except Exception as e:
+                                connection.rollback() 
+                                return False
+
+                connection.close()

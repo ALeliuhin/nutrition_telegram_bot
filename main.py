@@ -3,7 +3,7 @@ from telebot import types
 import db_manager, admin
 from datetime import datetime
 
-BOT_TOKEN = "INSERT HERE"
+BOT_TOKEN = admin.os.getenv("BOT_TOKEN")
 bot = telebot.TeleBot(BOT_TOKEN)
 
 
@@ -56,7 +56,7 @@ if __name__ == '__main__' :
 
         bot.send_message(message.chat.id, '<b>Welcome to the Main Menu</b>', parse_mode= "HTML", reply_markup=markup)
 
-    @bot.callback_query_handler(func=lambda call: call.data in ['choice_search', 'choice_select', 'choice_suggest', 'choice_modify'])
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("choice_"))
     def answer_main_menu(callback):
         if callback.message:
             if callback.data == 'choice_suggest':
@@ -68,6 +68,11 @@ if __name__ == '__main__' :
             elif callback.data == 'choice_modify':
                 bot.send_message(callback.message.chat.id, "Enter admin password:")
                 bot.register_next_step_handler(callback.message, check_admin_password)
+            elif callback.data == 'choice_search':
+                bot.send_message(callback.message.chat.id, "In development!")
+            elif callback.data == 'choice_select':
+                bot.send_message(callback.message.chat.id, "In development!")
+
 
     ### Suggest a product
 
@@ -134,7 +139,7 @@ if __name__ == '__main__' :
     def check_admin_password(message):
         users = admin.AdminInterface.check_admins()
         if message.text == admin.password and f"@{message.from_user.username}" in users:
-            bot.reply_to(message, "Access granted!")
+            bot.reply_to(message, "<b>Access granted!</b>", parse_mode="HTML")
             markup = types.InlineKeyboardMarkup(row_width=2)
 
             inspect_suggestions = types.InlineKeyboardButton('Inspect current suggestions', callback_data='inspect_suggestions')
@@ -148,6 +153,8 @@ if __name__ == '__main__' :
             bot.reply_to(message, "Wrong password or lack of privileges. Please try again.")
             return
     
+    selected_suggestions = {}
+
     @bot.callback_query_handler(func=lambda call : call.data in ['inspect_suggestions', 'delete_product', 'grant_privileges'])
     def answer_admin_menu(callback):
         if callback.message:
@@ -156,17 +163,9 @@ if __name__ == '__main__' :
                 if len(list_suggestions) == 0:
                     bot.answer_callback_query(callback.id, "No suggestions found.", show_alert=True)
                     return 
-                markup = types.InlineKeyboardMarkup(row_width=2)
-                for suggestion in list_suggestions:
-                    suggestion_id = suggestion[0]
-                    product_type = suggestion[2]
-                    product_name = suggestion[3]
-                    product_supplier = suggestion[4]
-                    button_text = f'{product_type}: {product_name} by "{product_supplier}"'
-                    markup.add(types.InlineKeyboardButton(button_text, callback_data=f"approve_{suggestion_id}"))
-                bot.send_message(callback.message.chat.id, "<b>Please review the following suggestions:</b>", parse_mode="HTML", reply_markup=markup)
-            
-            if callback.data == 'grant_privileges':
+                
+                render_suggestions_menu(callback.message.chat.id, list_suggestions)
+            elif callback.data == 'grant_privileges':
                 users = admin.AdminInterface.inspect_login_data()
                 response = "<b>Login Data:</b>\n\n"
                 for user in users:
@@ -177,6 +176,75 @@ if __name__ == '__main__' :
                 bot.send_message(callback.message.chat.id, "Type in manually usernames to grant privilege 'admin', separated by spaces & including '@'")
                 bot.register_next_step_handler(callback.message, grant_privileges)
 
+    def render_suggestions_menu(chat_id, list_suggestions):
+        markup = types.InlineKeyboardMarkup(row_width=2)
+
+        for suggestion in list_suggestions:
+            suggestion_id = suggestion[0]
+            product_type = suggestion[2]
+            product_name = suggestion[3]
+            product_supplier = suggestion[4]
+
+            selected = selected_suggestions.get(suggestion_id, False)
+            button_text = f"{'✅' if selected else '⬜'} {product_type}: {product_name} by \"{product_supplier}\""
+
+            markup.add(types.InlineKeyboardButton(button_text, callback_data=f"toggle_{suggestion_id}"))
+
+        markup.add(types.InlineKeyboardButton("✅ Submit", callback_data="submit_suggestions"))
+
+        bot.send_message(chat_id, "<b>Please review the following suggestions:</b>", parse_mode="HTML", reply_markup=markup)
+
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("toggle_"))
+    def toggle_suggestion(callback):
+        suggestion_id = int(callback.data.split('_')[1])
+
+        if suggestion_id in selected_suggestions:
+            selected_suggestions[suggestion_id] = not selected_suggestions[suggestion_id]
+        else:
+            selected_suggestions[suggestion_id] = True
+
+        list_suggestions = admin.AdminInterface.check_database_for_suggestion()
+        markup = types.InlineKeyboardMarkup(row_width=2)
+
+        for suggestion in list_suggestions:
+            suggestion_id = suggestion[0]
+            product_type = suggestion[2]
+            product_name = suggestion[3]
+            product_supplier = suggestion[4]
+
+            selected = selected_suggestions.get(suggestion_id, False)
+            button_text = f"{'✅' if selected else '⬜'} {product_type}: {product_name} by \"{product_supplier}\""
+
+            markup.add(types.InlineKeyboardButton(button_text, callback_data=f"toggle_{suggestion_id}"))
+
+        markup.add(types.InlineKeyboardButton("✅ Submit", callback_data="submit_suggestions"))
+
+        bot.edit_message_text(
+                "<b>Please review the following suggestions:</b>",
+                callback.message.chat.id,
+                callback.message.message_id,
+                parse_mode="HTML",
+                reply_markup=markup
+        )
+
+    @bot.callback_query_handler(func=lambda call: call.data == "submit_suggestions")
+    def submit_selected_suggestions(callback):
+        selected_ids = [suggestion_id for suggestion_id, is_selected in selected_suggestions.items() if is_selected]
+
+        if not selected_ids:
+            bot.answer_callback_query(callback.id, "No suggestions were selected.", show_alert=True)
+            return
+        
+        result = admin.AdminInterface.add_selected_suggestions(selected_ids)
+
+        if result:
+            bot.send_message(callback.message.chat.id, "Selected suggestions have been successfully added to the database.")
+        else:
+            bot.send_message(callback.message.chat.id, "Error adding suggestions to the database.")
+
+        selected_suggestions.clear()
+
     def grant_privileges(message):
         users_to_be_granted = message.text.split()
         current_users = {user[0] for user in admin.AdminInterface.inspect_login_data()}
@@ -185,13 +253,13 @@ if __name__ == '__main__' :
         if not valid_users:
             bot.send_message(message.chat.id, "Error: No valid usernames found in the database.")
             return
+        
         result = admin.AdminInterface.grant_privileges(valid_users)
-
+        
         if result:
             bot.send_message(message.chat.id, "Privileges granted to the following users: " + ", ".join(valid_users))
         else:
             bot.send_message(message.chat.id, "Error: Some usernames may not exist or there was an issue granting privileges.")
 
 
-
-    bot.infinity_polling()
+    bot.infinity_polling()  

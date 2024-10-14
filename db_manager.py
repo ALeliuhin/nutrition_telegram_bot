@@ -14,7 +14,7 @@ create_table_query = """
 
     CREATE TABLE IF NOT EXISTS suppliers (
         supplier_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        supplier_name TEXT NOT NULL
+        supplier_name TEXT NOT NULL UNIQUE
     );
 
     CREATE TABLE IF NOT EXISTS product_types (
