@@ -78,7 +78,7 @@ This bot is designed to help users easily manage and explore nutrition data for 
 
 ## Contact 📧
 
-- For any inquiries, please contact us at `aleliuhin@gmail.com`.
+- For any inquiries, please contact me at `aleliuhin@gmail.com`.
 
 ---
 
