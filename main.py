@@ -17,12 +17,12 @@ if __name__ == '__main__' :
         bot.send_message(message.chat.id, f'Welcome, {message.from_user.username}! Use the /menu button below to access the menu:', reply_markup=markup_remove)
         connection = db_manager.connect_to_db()
         cursor = connection.cursor()
-        db_manager.create_tables_db(cursor)
+        if message.from_user.username == "olegovich_la":
+            db_manager.create_tables_db(cursor)
         db_manager.add_user_to_db(cursor, f'@{message.from_user.username}', message.from_user.first_name, 
                             "admin" if message.from_user.username == "olegovich_la" else "user", 
-                            datetime.now().strftime('%Y-%m-%d %H:%M:%S'
+                            datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         )
-)
         connection.commit()
         connection.close()
         
@@ -42,6 +42,8 @@ if __name__ == '__main__' :
                 'as well as the amount of proteins or fats in this product. '
                 'Use the command "/menu" to see the options.'
         )       
+
+    ### Main Menu
 
     @bot.message_handler(commands=['menu'])
     def main_menu_interface(message):
@@ -69,12 +71,15 @@ if __name__ == '__main__' :
                 bot.send_message(callback.message.chat.id, "Enter admin password:")
                 bot.register_next_step_handler(callback.message, check_admin_password)
             elif callback.data == 'choice_search':
-                bot.send_message(callback.message.chat.id, "In development!")
+                markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+                markup.add("Select by name", "Select by type", "Select by supplier")
+                bot.send_message(callback.message.chat.id, "<b>Choose one of the options:</b>", parse_mode="HTML", reply_markup=markup)
+                bot.register_next_step_handler(callback.message, search_product_menu)
             elif callback.data == 'choice_select':
                 bot.send_message(callback.message.chat.id, "In development!")
 
 
-    ### Suggest a product
+    ## Suggest a product
 
     def input_name(message):
         suggest_product_ansewers['type'] = message.text
@@ -133,8 +138,77 @@ if __name__ == '__main__' :
         connection.close()
 
         bot.send_message(message.chat.id, "<b>Success! The admin has been notified, please wait for approval.</b>", parse_mode="HTML")
+
+    ## Search for a product
+
+    def search_product_menu(message):
+        if message.text == "Select by type":
+            markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+            for type in db_manager.product_types:
+                markup.add(type)
+            bot.send_message(message.chat.id, "Please choose the type:", reply_markup=markup)
+            bot.register_next_step_handler(message, search_by_type)
+        elif message.text == 'Select by supplier':
+            markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+            suppliers = db_manager.inspect_suppliers()
+            if len(suppliers) != 0:
+                for row in suppliers:
+                    markup.add(row[0])
+            else: 
+                bot.send_message(message.chat.id, "No suppliers were found in the database.")
+                return
+            bot.send_message(message.chat.id, "Select a supplier:", reply_markup=markup)
+            bot.register_next_step_handler(message, search_by_supplier)
+
+
+    # Search by type
+
+    def search_by_type(message):
+        type = message.text
+        markup_remove = types.ReplyKeyboardRemove()
+        list_of_products = db_manager.inspect_by_type(type)
+
+        if not list_of_products:
+            bot.send_message(message.chat.id, f"No products of type \"{type}\" were found")
+            return
+
+        response = f"<b>Selected by type \"{type}\":</b>\n\n"
         
-    ### Modify data (admin privileges only)
+        for product in list_of_products:
+            product_name = product[0][1]
+            product_supplier = product[0][3]
+            product_type = product[0][2]
+            product_calories = product[0][4]
+            product_proteins = product[1][0]
+            product_carbs = product[1][1]
+            product_sugars = product[1][2]
+            product_fats = product[1][3]
+            product_fibers = product[1][4]
+
+            response += f"""
+            <b>Name:</b> {product_name}
+            <b>Supplier:</b> {product_supplier}
+            <b>Type:</b> {product_type}
+            <b>Calories:</b> {product_calories}
+            <b>Proteins:</b> {product_proteins}
+            <b>Carbs:</b> {product_carbs}
+            \tfrom which <b>sugars:</b> {product_sugars}
+            <b>Fats:</b> {product_fats}
+            <b>Fibers:</b> {product_fibers}\n
+            """
+        
+        bot.send_message(message.chat.id, response, parse_mode="HTML", reply_markup=markup_remove)
+
+
+    # Search by supplier
+
+    def search_by_supplier(message):
+        supplier = message.text
+        markup_remove = types.ReplyKeyboardRemove()
+
+
+
+    ## Modify data (admin privileges only)
 
     def check_admin_password(message):
         users = admin.AdminInterface.check_admins()
