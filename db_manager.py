@@ -94,7 +94,8 @@ def inspect_suppliers():
     cursor = connection.cursor()
 
     suppliers = cursor.execute("""
-        SELECT DISTINCT (supplier_name) FROM suppliers;
+        SELECT DISTINCT (supplier_name) FROM suppliers
+        ORDER BY supplier_name;
     """).fetchall()
 
     connection.commit()
@@ -142,3 +143,70 @@ def inspect_by_type(product_type_name):
 
     return list_of_products
 
+
+def inspect_by_supplier(product_supplier_name):
+    connection = connect_to_db()
+    cursor = connection.cursor()
+
+    supplier_id = cursor.execute("""
+        SELECT supplier_id FROM suppliers
+        WHERE supplier_name = ?;
+    """, (product_supplier_name,)).fetchone()
+
+    products_by_supplier = cursor.execute("""
+        SELECT p.product_id, p.product_name, pt.type_name, s.supplier_name, p.calories,
+            n.proteins, n.carbos, n.sugars, n.fats, n.fiber
+        FROM products p
+        JOIN product_types pt ON p.product_type = pt.type_id
+        JOIN suppliers s ON p.product_supplier = s.supplier_id
+        LEFT JOIN nutrition_info n ON p.product_id = n.product_id
+        WHERE p.product_supplier = ?
+        ORDER BY p.product_name;
+    """, (supplier_id[0],)).fetchall()
+    
+    if len(products_by_supplier) == 0:
+        return None
+    
+    list_of_products = [
+        (
+            (product[0], product[1], product[2], product[3], product[4]), 
+            (product[5], product[6], product[7], product[8], product[9]) 
+        )
+        for product in products_by_supplier
+    ]
+
+    connection.commit()
+    connection.close()
+
+    return list_of_products
+
+def inspect_by_name(name):
+    connection = connect_to_db()
+    cursor = connection.cursor()
+
+    products_by_name = cursor.execute("""
+        SELECT p.product_id, p.product_name, pt.type_name, s.supplier_name, p.calories,
+            n.proteins, n.carbos, n.sugars, n.fats, n.fiber
+        FROM products p 
+        JOIN product_types pt ON p.product_type = pt.type_id
+        JOIN suppliers s ON p.product_supplier = s.supplier_id
+        LEFT JOIN nutrition_info n ON p.product_id = n.product_id
+        WHERE product_name = ? OR product_name LIKE ?
+        ORDER BY p.product_name;
+    """, (name, name[0:2] + '%')).fetchall()
+
+    if len(products_by_name) == 0:
+        return None
+    
+    list_of_products = [
+        (
+            (product[0], product[1], product[2], product[3], product[4]), 
+            (product[5], product[6], product[7], product[8], product[9]) 
+        )
+        for product in products_by_name
+    ]
+
+    connection.commit()
+    connection.close()
+
+    return list_of_products

@@ -159,6 +159,9 @@ if __name__ == '__main__' :
                 return
             bot.send_message(message.chat.id, "Select a supplier:", reply_markup=markup)
             bot.register_next_step_handler(message, search_by_supplier)
+        elif message.text == 'Select by name':
+            bot.send_message(message.chat.id, "Please write the name of the product:")
+            bot.register_next_step_handler(message, search_by_name)
 
 
     # Search by type
@@ -206,6 +209,77 @@ if __name__ == '__main__' :
         supplier = message.text
         markup_remove = types.ReplyKeyboardRemove()
 
+        list_of_products = db_manager.inspect_by_supplier(supplier)
+
+        if not list_of_products:
+            bot.send_message(message.chat.id, f"No products of type \"{supplier}\" were found")
+            return
+
+        response = f"<b>Selected by supplier \"{supplier}\":</b>\n\n"
+        
+        for product in list_of_products:
+            product_name = product[0][1]
+            product_supplier = product[0][3]
+            product_type = product[0][2]
+            product_calories = product[0][4]
+            product_proteins = product[1][0]
+            product_carbs = product[1][1]
+            product_sugars = product[1][2]
+            product_fats = product[1][3]
+            product_fibers = product[1][4]
+
+            response += f"""
+            <b>Name:</b> {product_name}
+            <b>Supplier:</b> {product_supplier}
+            <b>Type:</b> {product_type}
+            <b>Calories:</b> {product_calories}
+            <b>Proteins:</b> {product_proteins}
+            <b>Carbs:</b> {product_carbs}
+            \tfrom which <b>sugars:</b> {product_sugars}
+            <b>Fats:</b> {product_fats}
+            <b>Fibers:</b> {product_fibers}\n
+            """
+        
+        bot.send_message(message.chat.id, response, parse_mode="HTML", reply_markup=markup_remove)
+
+    # Search by name
+
+    def search_by_name(message):
+        name = message.text.capitalize()
+        markup_remove = types.ReplyKeyboardRemove()
+
+        list_of_products = db_manager.inspect_by_name(name)
+
+        if not list_of_products:
+            bot.send_message(message.chat.id, f"No products of name \"{name}\" were found")
+            return
+
+        response = f"<b>Selected by name \"{name}\":</b>\n\n"
+        
+        for product in list_of_products:
+            product_name = product[0][1]
+            product_supplier = product[0][3]
+            product_type = product[0][2]
+            product_calories = product[0][4]
+            product_proteins = product[1][0]
+            product_carbs = product[1][1]
+            product_sugars = product[1][2]
+            product_fats = product[1][3]
+            product_fibers = product[1][4]
+
+            response += f"""
+            <b>Name:</b> {product_name}
+            <b>Supplier:</b> {product_supplier}
+            <b>Type:</b> {product_type}
+            <b>Calories:</b> {product_calories}
+            <b>Proteins:</b> {product_proteins}
+            <b>Carbs:</b> {product_carbs}
+            \tfrom which <b>sugars:</b> {product_sugars}
+            <b>Fats:</b> {product_fats}
+            <b>Fibers:</b> {product_fibers}\n
+            """
+        
+        bot.send_message(message.chat.id, response, parse_mode="HTML", reply_markup=markup_remove)
 
 
     ## Modify data (admin privileges only)
