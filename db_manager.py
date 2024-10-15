@@ -14,7 +14,7 @@ create_table_query = """
 
     CREATE TABLE IF NOT EXISTS suppliers (
         supplier_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        supplier_name TEXT NOT NULL
+        supplier_name TEXT NOT NULL UNIQUE
     );
 
     CREATE TABLE IF NOT EXISTS product_types (
@@ -45,7 +45,7 @@ create_table_query = """
 
     CREATE TABLE IF NOT EXISTS login_data (
         user_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        tg_username TEXT NOT NULL,
+        tg_username TEXT NOT NULL UNIQUE,
         user_name TEXT,
         privilege TEXT NOT NULL,
         login_time DATETIME DEFAULT CURRENT_TIMESTAMP 
@@ -89,5 +89,56 @@ def suggest_adding_product(cursor, tuple_to_write):
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, tuple_to_write)
 
+def inspect_suppliers():
+    connection = connect_to_db()
+    cursor = connection.cursor()
 
+    suppliers = cursor.execute("""
+        SELECT DISTINCT (supplier_name) FROM suppliers;
+    """).fetchall()
+
+    connection.commit()
+    connection.close()
+
+    return suppliers
+
+
+def inspect_by_type(product_type_name):
+    connection = connect_to_db()
+    cursor = connection.cursor()
+
+    type_id = cursor.execute("""
+        SELECT type_id FROM product_types
+        WHERE type_name = ?;
+    """, (product_type_name,)).fetchone()
+
+    if type_id is None:
+        return None  
+
+    products_by_type = cursor.execute("""
+        SELECT p.product_id, p.product_name, pt.type_name, s.supplier_name, p.calories,
+               n.proteins, n.carbos, n.sugars, n.fats, n.fiber
+        FROM products p
+        JOIN product_types pt ON p.product_type = pt.type_id
+        JOIN suppliers s ON p.product_supplier = s.supplier_id
+        LEFT JOIN nutrition_info n ON p.product_id = n.product_id
+        WHERE p.product_type = ?
+        ORDER BY p.product_name;
+    """, (type_id[0],)).fetchall()
+
+    if len(products_by_type) == 0:
+        return None
+    
+    list_of_products = [
+        (
+            (product[0], product[1], product[2], product[3], product[4]), 
+            (product[5], product[6], product[7], product[8], product[9]) 
+        )
+        for product in products_by_type
+    ]
+
+    connection.commit()
+    connection.close()
+
+    return list_of_products
 
