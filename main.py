@@ -323,6 +323,9 @@ if __name__ == '__main__' :
                 bot.send_message(callback.message.chat.id, response, parse_mode="HTML")
                 bot.send_message(callback.message.chat.id, "Type in manually usernames to grant privilege 'admin', separated by spaces & including '@'")
                 bot.register_next_step_handler(callback.message, grant_privileges)
+            elif callback.data == 'delete_product':
+                bot.send_message(callback.message.chat.id, "Please write the name of the product")
+                bot.register_next_step_handler(callback.message, find_product_to_delete)
 
     def render_suggestions_menu(chat_id, list_suggestions):
         markup = types.InlineKeyboardMarkup(row_width=2)
@@ -409,5 +412,29 @@ if __name__ == '__main__' :
         else:
             bot.send_message(message.chat.id, "Error: Some usernames may not exist or there was an issue granting privileges.")
 
+    def find_product_to_delete(message):
+        name = message.text.capitalize()
+        markup = types.InlineKeyboardMarkup(row_width=2)
+
+        list_of_products = db_manager.inspect_by_name(name)
+        for product in list_of_products:
+            markup.add(types.InlineKeyboardButton(f"{product[0][1]} by '{product[0][3]}'", callback_data=f"delete_{product[0][1]}_{product[0][3]}"))
+
+        bot.send_message(message.chat.id, "<b>Click on the product to delete:</b>", parse_mode="HTML", reply_markup=markup)
+        return
+
+    @bot.callback_query_handler(func=lambda call : call.data.startswith('delete_'))
+    def delete_product(callback):
+        if callback.message:
+            product_data = callback.data.split("_")
+            product_name = product_data[1]
+            product_supplier = product_data[2]
+
+            deleted_bool = admin.AdminInterface.delete_product_from_db(product_name, product_supplier)
+
+            if deleted_bool:
+                bot.send_message(callback.message.chat.id, f"{product_name} by '{product_supplier}' has been succesfully deleted!")
+            else:
+                bot.send_message(callback.message.chat.id, "Error deleting a product. Please try again.")
 
     bot.infinity_polling()  
