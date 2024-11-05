@@ -417,6 +417,9 @@ if __name__ == '__main__' :
         markup = types.InlineKeyboardMarkup(row_width=2)
 
         list_of_products = db_manager.inspect_by_name(name)
+        if not list_of_products:
+            bot.send_message(message.chat.id, "No product with such name was found")
+            return
         for product in list_of_products:
             markup.add(types.InlineKeyboardButton(f"{product[0][1]} by '{product[0][3]}'", callback_data=f"delete_{product[0][1]}_{product[0][3]}"))
 
