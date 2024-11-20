@@ -45,7 +45,7 @@ create_table_query = """
 
     CREATE TABLE IF NOT EXISTS login_data (
         user_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        tg_username TEXT NOT NULL UNIQUE,
+        tg_username TEXT NOT NULL,
         user_name TEXT,
         privilege TEXT NOT NULL,
         login_time DATETIME DEFAULT CURRENT_TIMESTAMP 

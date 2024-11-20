@@ -57,9 +57,9 @@ if __name__ == '__main__' :
         select_meal = types.InlineKeyboardButton('Select food', callback_data='choice_select')
         suggest = types.InlineKeyboardButton('Suggest food to add', callback_data='choice_suggest')
         admin_change = types.InlineKeyboardButton('Modify data (admin)', callback_data='choice_modify')
-        generate_recipe_ai = types.InlineKeyboardButton('Generate a recipe (AI)', callback_data='choice_generate')
+        generate_recipe_ai = types.InlineKeyboardButton('Generate recipe AI', callback_data='choice_generate')
 
-        markup.add(search, select_meal, suggest, admin_change)
+        markup.add(search, select_meal, suggest, admin_change, generate_recipe_ai)
 
         bot.send_message(message.chat.id, '<b>Welcome to the Main Menu</b>', parse_mode= "HTML", reply_markup=markup)
 
