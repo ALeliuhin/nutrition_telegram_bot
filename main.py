@@ -1,10 +1,14 @@
 import telebot
 from telebot import types
+import openai
 import db_manager, admin
 from datetime import datetime
 
 BOT_TOKEN = admin.os.getenv("BOT_TOKEN")
+OPENAI_API_KEY = admin.os.getenv("OPENAI_API_KEY")
+
 bot = telebot.TeleBot(BOT_TOKEN)
+openai.api_key = OPENAI_API_KEY
 
 
 if __name__ == '__main__' :
@@ -53,6 +57,7 @@ if __name__ == '__main__' :
         select_meal = types.InlineKeyboardButton('Select food', callback_data='choice_select')
         suggest = types.InlineKeyboardButton('Suggest food to add', callback_data='choice_suggest')
         admin_change = types.InlineKeyboardButton('Modify data (admin)', callback_data='choice_modify')
+        generate_recipe_ai = types.InlineKeyboardButton('Generate a recipe (AI)', callback_data='choice_generate')
 
         markup.add(search, select_meal, suggest, admin_change)
 
@@ -76,6 +81,8 @@ if __name__ == '__main__' :
                 bot.send_message(callback.message.chat.id, "<b>Choose one of the options:</b>", parse_mode="HTML", reply_markup=markup)
                 bot.register_next_step_handler(callback.message, search_product_menu)
             elif callback.data == 'choice_select':
+                bot.send_message(callback.message.chat.id, "In development!")
+            elif callback.data == 'choice_generate':
                 bot.send_message(callback.message.chat.id, "In development!")
 
 
