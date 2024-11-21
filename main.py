@@ -8,12 +8,14 @@ BOT_TOKEN = admin.os.getenv("BOT_TOKEN")
 OPENAI_API_KEY = admin.os.getenv("OPENAI_API_KEY")
 
 bot = telebot.TeleBot(BOT_TOKEN)
-openai.api_key = OPENAI_API_KEY
+client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 
 if __name__ == '__main__' :
 
-    suggest_product_ansewers = {}
+    suggest_product_list = {}
+    selected_products = []
+
 
     @bot.message_handler(commands=['start'])
     def start_command(message):
@@ -77,36 +79,118 @@ if __name__ == '__main__' :
                 bot.register_next_step_handler(callback.message, check_admin_password)
             elif callback.data == 'choice_search':
                 markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-                markup.add("Select by name", "Select by type", "Select by supplier")
+                markup.add("Search by name", "Search by type", "Search by supplier")
                 bot.send_message(callback.message.chat.id, "<b>Choose one of the options:</b>", parse_mode="HTML", reply_markup=markup)
                 bot.register_next_step_handler(callback.message, search_product_menu)
             elif callback.data == 'choice_select':
-                bot.send_message(callback.message.chat.id, "In development!")
+                markup = types.InlineKeyboardMarkup(row_width=2)
+
+                add_products_to_cart = types.InlineKeyboardButton('Add products to cart', callback_data='add_products_to_cart')
+                markup.add(add_products_to_cart)
+                if len(selected_products) > 0:
+                    cancel_button = types.InlineKeyboardButton('Cancel', callback_data='cancel_add_product')
+                    markup.add(cancel_button)
+
+                    total_calories = 0
+                    total_proteins = 0
+                    total_carbs = 0
+                    total_sugars = 0
+                    total_fats = 0
+                    total_fibers = 0
+
+                    response = f"<b>Products in cart:</b>\n"
+                    
+                    for product in selected_products:
+                        product_name = product[1]
+                        product_supplier = product[3]
+                        product_type = product[2]
+                        product_calories = product[4]
+                        product_proteins = product[5]
+                        product_carbs = product[6]
+                        product_sugars = product[7]
+                        product_fats = product[8]
+                        product_fibers = product[9]
+
+                        total_calories += product_calories
+                        total_proteins += product_proteins
+                        total_carbs += product_carbs
+                        total_sugars += product_sugars
+                        total_fats += product_fats
+                        total_fibers += product_fibers
+
+                        response += f"""
+                        <b>Name:</b> {product_name}
+                        <b>Supplier:</b> {product_supplier}
+                        <b>Type:</b> {product_type}
+                        <b>Calories:</b> {product_calories}
+                        <b>Proteins:</b> {product_proteins}
+                        <b>Carbs:</b> {product_carbs}
+                        \tfrom which <b>sugars:</b> {product_sugars}
+                        <b>Fats:</b> {product_fats}
+                        <b>Fibers:</b> {product_fibers}\n
+                        """
+                    
+                    response += f"""\n<b>Total calories:</b> {total_calories}
+                    <b>Total proteins:</b> {total_proteins}
+                    <b>Total carbs:</b> {total_carbs}
+                    <b>Total sugars:</b> {total_sugars}
+                    <b>Total fats:</b> {total_fats}
+                    <b>Total fibers:</b> {total_fibers}
+                    """
+                    bot.send_message(callback.message.chat.id, response, parse_mode="HTML", reply_markup=markup)
+                else:
+                    bot.send_message(callback.message.chat.id, '<b>The cart is currently empty</b>', parse_mode="HTML", reply_markup=markup)                
             elif callback.data == 'choice_generate':
-                bot.send_message(callback.message.chat.id, "In development!")
+                try:
+                    completion = openai.chat.completions.create(
+                        model="gpt-3.5-turbo",
+                        messages=[
+                            {"role": "system", "content": "You are a good cook, suggesting a nice meal recipe in a short message."},
+                            {"role": "user", "content": "Generate a recipe containing at least meat."}
+                        ],
+                    )
+                    recipe = completion.choices[0].message.content
+                    bot.send_message(callback.message.chat.id, recipe)
+                except Exception as e:
+                    bot.send_message(callback.message.chat.id, f"An error occurred: {str(e)}")
+
+    ## Add product to cart
+
+    @bot.callback_query_handler(func=lambda call: call.data in ['add_products_to_cart'])
+    def add_product_to_cart(callback):
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        markup.add("Select by name", "Select by type", "Select by supplier")
+        bot.send_message(callback.message.chat.id, "<b>Choose one of the options:</b>", parse_mode="HTML", reply_markup=markup)
+        bot.register_next_step_handler(callback.message, search_product_menu)
+
+    @bot.callback_query_handler(func=lambda call: call.data in ['cancel_add_product'])
+    def cancel_add_product(callback):
+        if callback.message:
+            selected_products.clear()
+            bot.send_message(callback.message.chat.id, "<b>The cart is now empty!</b>", parse_mode="HTML")
 
 
     ## Suggest a product
 
     def input_name(message):
-        suggest_product_ansewers['type'] = message.text
+        suggest_product_list['type'] = message.text
         markup_remove = types.ReplyKeyboardRemove()
         bot.send_message(message.chat.id, 'Please input the name of the product:', reply_markup=markup_remove)
         bot.register_next_step_handler(message, input_suppliers_name)
 
     def input_suppliers_name(message):
-        suggest_product_ansewers['name'] = message.text.capitalize()
+        suggest_product_list['name'] = message.text.capitalize()
         bot.send_message(message.chat.id, "Specify the supplier's company name")
         bot.register_next_step_handler(message, input_calories)
 
     def input_calories(message):
-        suggest_product_ansewers['supplier'] = message.text.capitalize()
+        suggest_product_list['supplier'] = message.text.capitalize()
         bot.send_message(message.chat.id, "Input the amount of calories of the product per 100g")
         bot.register_next_step_handler(message, process_calories_data)
 
     def process_calories_data(message):
         try:
-            suggest_product_ansewers['calories'] = int(message.text)
+            suggest_product_list['calories'] = int(message.text)
         except ValueError:
             bot.send_message(message.chat.id, "The value must be numerical")
             return
@@ -128,10 +212,10 @@ if __name__ == '__main__' :
             bot.send_message(message.chat.id, "Please enter valid numeric values for nutrients.")
             return
         
-        product_type = suggest_product_ansewers['type']
-        product_name = suggest_product_ansewers['name']
-        product_supplier = suggest_product_ansewers['supplier']
-        product_calories = suggest_product_ansewers['calories']
+        product_type = suggest_product_list['type']
+        product_name = suggest_product_list['name']
+        product_supplier = suggest_product_list['supplier']
+        product_calories = suggest_product_list['calories']
 
         product_tuple = (f'@{message.from_user.username}', 
                         product_type, product_name, 
@@ -149,13 +233,16 @@ if __name__ == '__main__' :
     ## Search for a product
 
     def search_product_menu(message):
-        if message.text == "Select by type":
+        if message.text == "Search by type" or message.text == "Select by type":
             markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
             for type in db_manager.product_types:
                 markup.add(type)
             bot.send_message(message.chat.id, "Please choose the type:", reply_markup=markup)
-            bot.register_next_step_handler(message, search_by_type)
-        elif message.text == 'Select by supplier':
+            if message.text == "Search by type":
+                bot.register_next_step_handler(message, search_by_type)
+            else:
+                bot.register_next_step_handler(message, select_by_type)
+        elif message.text == 'Search by supplier' or message.text == "Select by supplier":
             markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
             suppliers = db_manager.inspect_suppliers()
             if len(suppliers) != 0:
@@ -165,10 +252,16 @@ if __name__ == '__main__' :
                 bot.send_message(message.chat.id, "No suppliers were found in the database.")
                 return
             bot.send_message(message.chat.id, "Select a supplier:", reply_markup=markup)
-            bot.register_next_step_handler(message, search_by_supplier)
-        elif message.text == 'Select by name':
+            if message.text == "Search by supplier": 
+                bot.register_next_step_handler(message, search_by_supplier)
+            else:
+                bot.register_next_step_handler(message, select_by_supplier)
+        elif message.text == 'Search by name' or 'Select by name':
             bot.send_message(message.chat.id, "Please write the name of the product:")
-            bot.register_next_step_handler(message, search_by_name)
+            if message.text == "Search by name":
+                bot.register_next_step_handler(message, search_by_name)
+            else:
+                bot.register_next_step_handler(message, select_by_name)
 
 
     # Search by type
@@ -288,6 +381,47 @@ if __name__ == '__main__' :
         
         bot.send_message(message.chat.id, response, parse_mode="HTML", reply_markup=markup_remove)
 
+    # Select by type
+
+    def select_by_type(message):
+        type = message.text
+        markup_remove = types.ReplyKeyboardRemove()
+
+        list_of_products = db_manager.inspect_by_type(type)
+
+        if not list_of_products:
+            bot.send_message(message.chat.id, f"No products of type \"{type}\" were found", reply_markup=markup_remove)
+            return
+        
+        markup_inline = types.InlineKeyboardMarkup(row_width=2)
+        for product in list_of_products:
+            product_id = product[0][0]
+            product_name = product[0][1]
+            product_supplier = product[0][3]
+            markup_inline.add(types.InlineKeyboardButton(f'{product_name} by "{product_supplier}"', callback_data=f"product_{product_id}"))
+        bot.send_message(message.chat.id, "Pick a product to add to the cart:", reply_markup=markup_inline)
+
+
+    # Select by supplier
+
+    def select_by_supplier(message):
+        pass
+
+    # Select by name
+
+    def select_by_name(message):
+        pass
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("product_"))
+    def add_products_to_cart(callback):
+        if callback.message:
+            splitted_callback = callback.data.split('_')
+            product = db_manager.find_by_id(splitted_callback[1])
+            if product is None:
+                bot.answer_callback_query(callback.id, "No products found.", show_alert=True)
+                return
+            selected_products.append(product)
+            bot.answer_callback_query(callback.id, f"Product has been added!", show_alert=True)\
 
     ## Modify data (admin privileges only)
 

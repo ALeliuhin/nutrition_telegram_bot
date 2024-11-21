@@ -103,6 +103,29 @@ def inspect_suppliers():
 
     return suppliers
 
+def find_by_id(product_id):
+    connection = connect_to_db()
+    cursor = connection.cursor()
+
+    try:
+        found_product = cursor.execute("""
+            SELECT p.product_id, p.product_name, pt.type_name, s.supplier_name, p.calories,
+                   n.proteins, n.carbos, n.sugars, n.fats, n.fiber
+            FROM products p
+            JOIN product_types pt ON p.product_type = pt.type_id
+            JOIN suppliers s ON p.product_supplier = s.supplier_id
+            LEFT JOIN nutrition_info n ON p.product_id = n.product_id
+            WHERE p.product_id = ?
+        """, (product_id,)).fetchone()
+        return found_product
+    except Exception as e:
+        connection.rollback()
+        print(f"Database error: {str(e)}")
+        return None 
+    finally:
+        connection.close()
+
+
 
 def inspect_by_type(product_type_name):
     connection = connect_to_db()
