@@ -98,25 +98,25 @@ if __name__ == '__main__' :
                     total_fats = 0
                     total_fibers = 0
 
-                    response = f"<b>Products in cart:</b>\n"
+                    response = f"<b>Products in cart: (per 100g)</b>\n"
                     
                     for product in selected_products:
-                        product_name = product[1]
-                        product_supplier = product[3]
-                        product_type = product[2]
-                        product_calories = product[4]
-                        product_proteins = product[5]
-                        product_carbs = product[6]
-                        product_sugars = product[7]
-                        product_fats = product[8]
-                        product_fibers = product[9]
+                        product_name = product[0][1]
+                        product_supplier = product[0][3]
+                        product_type = product[0][2]
+                        product_calories = product[0][4]
+                        product_proteins = product[0][5]
+                        product_carbs = product[0][6]
+                        product_sugars = product[0][7]
+                        product_fats = product[0][8]
+                        product_fibers = product[0][9]
 
-                        total_calories += product_calories
-                        total_proteins += product_proteins
-                        total_carbs += product_carbs
-                        total_sugars += product_sugars
-                        total_fats += product_fats
-                        total_fibers += product_fibers
+                        total_calories += product_calories * (product[1]/100)
+                        total_proteins += product_proteins * (product[1]/100)
+                        total_carbs += product_carbs * (product[1]/100)
+                        total_sugars += product_sugars * (product[1]/100)
+                        total_fats += product_fats * (product[1]/100)
+                        total_fibers += product_fibers * (product[1]/100)
 
                         response += f"""
                         <b>Name:</b> {product_name}
@@ -127,15 +127,16 @@ if __name__ == '__main__' :
                         <b>Carbs:</b> {product_carbs}
                         \tfrom which <b>sugars:</b> {product_sugars}
                         <b>Fats:</b> {product_fats}
-                        <b>Fibers:</b> {product_fibers}\n
+                        <b>Fibers:</b> {product_fibers}
+                        <b>Mass: </b> {product[1]}g\n
                         """
                     
-                    response += f"""\n<b>Total calories:</b> {total_calories}
-                    <b>Total proteins:</b> {total_proteins}
-                    <b>Total carbs:</b> {total_carbs}
-                    <b>Total sugars:</b> {total_sugars}
-                    <b>Total fats:</b> {total_fats}
-                    <b>Total fibers:</b> {total_fibers}
+                    response += f"""\n<b>Total calories:</b> {round(total_calories, 2)}
+                    <b>Total proteins:</b> {round(total_proteins, 2)}
+                    <b>Total carbs:</b> {round(total_carbs, 2)}
+                    <b>Total sugars:</b> {round(total_sugars, 2)}
+                    <b>Total fats:</b> {round(total_fats, 2)}
+                    <b>Total fibers:</b> {round(total_fibers, 2)}
                     """
                     bot.send_message(callback.message.chat.id, response, parse_mode="HTML", reply_markup=markup)
                 else:
@@ -145,8 +146,8 @@ if __name__ == '__main__' :
                     completion = openai.chat.completions.create(
                         model="gpt-3.5-turbo",
                         messages=[
-                            {"role": "system", "content": "You are a good cook, suggesting a nice meal recipe in a short message."},
-                            {"role": "user", "content": "Generate a recipe containing at least meat."}
+                            {"role": "system", "content": "You are a good cook, suggesting a nice meal recipe in a short message"},
+                            {"role": "user", "content": "Generate a tasty recipe"}
                         ],
                     )
                     recipe = completion.choices[0].message.content
@@ -158,6 +159,9 @@ if __name__ == '__main__' :
 
     @bot.callback_query_handler(func=lambda call: call.data in ['add_products_to_cart'])
     def add_product_to_cart(callback):
+        if(len(selected_products) > 10):
+            bot.send_message(callback.message.chat.id, "The cart is full. You cannot add more products")
+            return
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         markup.add("Select by name", "Select by type", "Select by supplier")
         bot.send_message(callback.message.chat.id, "<b>Choose one of the options:</b>", parse_mode="HTML", reply_markup=markup)
@@ -275,7 +279,7 @@ if __name__ == '__main__' :
             bot.send_message(message.chat.id, f"No products of type \"{type}\" were found")
             return
 
-        response = f"<b>Selected by type \"{type}\":</b>\n\n"
+        response = f"<b>Selected by type \"{type}\":</b>\n"
         
         for product in list_of_products:
             product_name = product[0][1]
@@ -315,7 +319,7 @@ if __name__ == '__main__' :
             bot.send_message(message.chat.id, f"No products of type \"{supplier}\" were found")
             return
 
-        response = f"<b>Selected by supplier \"{supplier}\":</b>\n\n"
+        response = f"<b>Selected by supplier \"{supplier}\":</b>\n"
         
         for product in list_of_products:
             product_name = product[0][1]
@@ -354,7 +358,7 @@ if __name__ == '__main__' :
             bot.send_message(message.chat.id, f"No products of name \"{name}\" were found")
             return
 
-        response = f"<b>Selected by name \"{name}\":</b>\n\n"
+        response = f"<b>Selected by name \"{name}\":</b>\n"
         
         for product in list_of_products:
             product_name = product[0][1]
@@ -415,13 +419,30 @@ if __name__ == '__main__' :
     @bot.callback_query_handler(func=lambda call: call.data.startswith("product_"))
     def add_products_to_cart(callback):
         if callback.message:
+            if len(selected_products) >= 7:
+                bot.send_message(callback.message.chat.id, "The cart is full. You can add at most 7 products.")
+                return
             splitted_callback = callback.data.split('_')
-            product = db_manager.find_by_id(splitted_callback[1])
+            product_id = splitted_callback[1]
+            product = db_manager.find_by_id(product_id)
             if product is None:
                 bot.answer_callback_query(callback.id, "No products found.", show_alert=True)
                 return
-            selected_products.append(product)
-            bot.answer_callback_query(callback.id, f"Product has been added!", show_alert=True)\
+
+            bot.send_message(callback.message.chat.id, "Specify the amount of the product: (e.g., 100g...)")
+            bot.register_next_step_handler(callback.message, lambda message: mass_calculation(message, product))
+
+    def mass_calculation(message, product):
+        try:
+            mass = int(message.text)
+            if not (1 <= mass <= 10000):
+                bot.send_message(message.chat.id, "Invalid input for mass in gramms.")
+                return
+            selected_products.append((product, mass))
+            bot.send_message(message.chat.id, f"{mass} gramms of '{product[1]}' have been added!")
+        except ValueError:
+            bot.send_message(message.chat.id, "Invalid input for mass in gramms.")
+
 
     ## Modify data (admin privileges only)
 
