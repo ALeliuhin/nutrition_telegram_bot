@@ -15,6 +15,7 @@ if __name__ == '__main__' :
 
     suggest_product_list = {}
     selected_products = []
+    current_cart_data = {"Products": []}
 
 
     @bot.message_handler(commands=['start'])
@@ -59,9 +60,9 @@ if __name__ == '__main__' :
         select_meal = types.InlineKeyboardButton('Select food', callback_data='choice_select')
         suggest = types.InlineKeyboardButton('Suggest food to add', callback_data='choice_suggest')
         admin_change = types.InlineKeyboardButton('Modify data (admin)', callback_data='choice_modify')
-        generate_recipe_ai = types.InlineKeyboardButton('Generate recipe AI', callback_data='choice_generate')
+        # generate_recipe_ai = types.InlineKeyboardButton('Generate recipe AI', callback_data='choice_generate')
 
-        markup.add(search, select_meal, suggest, admin_change, generate_recipe_ai)
+        markup.add(search, select_meal, suggest, admin_change)
 
         bot.send_message(message.chat.id, '<b>Welcome to the Main Menu</b>', parse_mode= "HTML", reply_markup=markup)
 
@@ -89,7 +90,8 @@ if __name__ == '__main__' :
                 markup.add(add_products_to_cart)
                 if len(selected_products) > 0:
                     cancel_button = types.InlineKeyboardButton('Cancel', callback_data='cancel_add_product')
-                    markup.add(cancel_button)
+                    generate_recipe_ai = types.InlineKeyboardButton('Generate recipe AI', callback_data='choice_generate')
+                    markup.add(cancel_button, generate_recipe_ai)
 
                     total_calories = 0
                     total_proteins = 0
@@ -110,13 +112,19 @@ if __name__ == '__main__' :
                         product_sugars = product[0][7]
                         product_fats = product[0][8]
                         product_fibers = product[0][9]
+                        product_mass = product[1]
 
-                        total_calories += product_calories * (product[1]/100)
-                        total_proteins += product_proteins * (product[1]/100)
-                        total_carbs += product_carbs * (product[1]/100)
-                        total_sugars += product_sugars * (product[1]/100)
-                        total_fats += product_fats * (product[1]/100)
-                        total_fibers += product_fibers * (product[1]/100)
+                        current_cart_data["Products"].append({
+                            "name": product_name,
+                            "mass": product_mass
+                        })
+
+                        total_calories += product_calories * (product_mass / 100)
+                        total_proteins += product_proteins * (product_mass / 100)
+                        total_carbs += product_carbs * (product_mass / 100)
+                        total_sugars += product_sugars * (product_mass / 100)
+                        total_fats += product_fats * (product_mass / 100)
+                        total_fibers += product_fibers * (product_mass / 100)
 
                         response += f"""
                         <b>Name:</b> {product_name}
@@ -128,7 +136,7 @@ if __name__ == '__main__' :
                         \tfrom which <b>sugars:</b> {product_sugars}
                         <b>Fats:</b> {product_fats}
                         <b>Fibers:</b> {product_fibers}
-                        <b>Mass: </b> {product[1]}g\n
+                        <b>Mass: </b> {product_mass}g\n
                         """
                     
                     response += f"""\n<b>Total calories:</b> {round(total_calories, 2)}
@@ -146,14 +154,27 @@ if __name__ == '__main__' :
                     completion = openai.chat.completions.create(
                         model="gpt-3.5-turbo",
                         messages=[
-                            {"role": "system", "content": "You are a good cook, suggesting a nice meal recipe in a short message"},
-                            {"role": "user", "content": "Generate a tasty recipe"}
+                            {
+                                "role": "system",
+                                "content": """
+                                You are a recipe generator. I will provide a JSON file with a list of products with nutritional data. You generate a recipe using all the products from the JSON, along with your suggested ones to create a dish. Ensure the recipe is realistic, creative, and easy to follow.
+
+                                Your output must include the following sections:
+                                1. Recipe Title - A short and descriptive title for the recipe.
+                                2. Ingredients - List all ingredients used in the recipe and specifu their mass or amount.
+                                3. Instructions - Provide 4-6 simple steps to prepare the recipe.
+                                4. Nutrition data per Serving
+                                5. Highlight each section.
+                                """
+                            },
+                            {"role": "user", "content": str(current_cart_data)}
                         ],
-                    )
+    )
                     recipe = completion.choices[0].message.content
                     bot.send_message(callback.message.chat.id, recipe)
                 except Exception as e:
                     bot.send_message(callback.message.chat.id, f"An error occurred: {str(e)}")
+
 
     ## Add product to cart
 
@@ -171,6 +192,7 @@ if __name__ == '__main__' :
     def cancel_add_product(callback):
         if callback.message:
             selected_products.clear()
+            current_cart_data.clear()
             bot.send_message(callback.message.chat.id, "<b>The cart is now empty!</b>", parse_mode="HTML")
 
 
