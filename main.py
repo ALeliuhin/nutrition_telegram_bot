@@ -541,7 +541,6 @@ if __name__ == '__main__' :
 
         list_suggestions = admin.AdminInterface.check_database_for_suggestion()
         markup = types.InlineKeyboardMarkup(row_width=2)
-
         for suggestion in list_suggestions:
             suggestion_id = suggestion[0]
             product_type = suggestion[2]
@@ -550,18 +549,18 @@ if __name__ == '__main__' :
 
             selected = selected_suggestions.get(suggestion_id, False)
             button_text = f"{'✅' if selected else '⬜'} {product_type}: {product_name} by \"{product_supplier}\""
-
             markup.add(types.InlineKeyboardButton(button_text, callback_data=f"toggle_{suggestion_id}"))
 
         markup.add(types.InlineKeyboardButton("✅ Submit", callback_data="submit_suggestions"))
 
         bot.edit_message_text(
-                "<b>Please review the following suggestions:</b>",
-                callback.message.chat.id,
-                callback.message.message_id,
-                parse_mode="HTML",
-                reply_markup=markup
+            "<b>Please review the following suggestions:</b>",
+            callback.message.chat.id,
+            callback.message.message_id,
+            parse_mode="HTML",
+            reply_markup=markup
         )
+
 
     @bot.callback_query_handler(func=lambda call: call.data == "submit_suggestions")
     def submit_selected_suggestions(callback):
@@ -570,7 +569,7 @@ if __name__ == '__main__' :
         if not selected_ids:
             bot.answer_callback_query(callback.id, "No suggestions were selected.", show_alert=True)
             return
-        
+
         result = admin.AdminInterface.add_selected_suggestions(selected_ids)
 
         if result:

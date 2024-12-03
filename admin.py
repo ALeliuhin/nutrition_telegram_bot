@@ -67,8 +67,8 @@ class AdminInterface():
                 connection = db_manager.connect_to_db()
                 cursor = connection.cursor()
 
-                for suggestion_id in selected_ids:
-                        try:
+                try:
+                        for suggestion_id in selected_ids:
                                 current_suggestion = cursor.execute("""
                                         SELECT * FROM list_suggestions
                                         WHERE suggestion_id = ?;
@@ -86,7 +86,6 @@ class AdminInterface():
                                 product_sugars = current_suggestion[8]
                                 product_fats = current_suggestion[9]
                                 product_fiber = current_suggestion[10]
-
 
                                 product_type_id = cursor.execute("""
                                         SELECT type_id FROM product_types WHERE type_name = ?;
@@ -114,17 +113,20 @@ class AdminInterface():
                                 """, (product_id, product_proteins, product_carbs, product_sugars, product_fats, product_fiber))
 
                                 cursor.execute("""
-                                        DELETE FROM list_suggestions;
-                                """)
+                                        DELETE FROM list_suggestions WHERE suggestion_id = ?;
+                                """, (suggestion_id,))
 
-                                connection.commit()
-                                return True
+                        connection.commit()
+                        return True
 
-                        except Exception as e:
-                                connection.rollback() 
-                                return False
+                except Exception as e:
+                        print("Error in add_selected_suggestions:", e)
+                        connection.rollback()
+                        return False
 
-                connection.close()
+                finally:
+                        connection.close()
+
 
         @staticmethod
         def delete_product_from_db(product_name, supplier_name):

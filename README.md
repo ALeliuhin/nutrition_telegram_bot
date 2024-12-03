@@ -10,6 +10,7 @@ This bot is designed to help users easily manage and explore nutrition data for 
 
 - **Product Lookup**: Search for a product and view detailed nutrition information.
 - **Meal Composition**: Select products and combine them to create a meal.
+- **Recipe Generation**: Generate a recipe using selected products via OpenAI API.
 - **Product Suggestions**: Suggest new products and have them added to the database.
 - **Admin Privileges**: Certain users can be granted *admin* rights to modify data directly from the bot interface.
 - **Supplier Information**: Easily manage supplier names and their related products.
@@ -28,6 +29,7 @@ This bot is designed to help users easily manage and explore nutrition data for 
 - **SQLite3**: For lightweight, file-based database storage.
 - **pyTelegramBotAPI**: A Python library that interfaces with Telegram's Bot API.
 - **Telegram Application**: User interaction with the bot is done via the Telegram app.
+- **OpenAI API**: For recipe generation based on a predefined prompt.
 
 ---
 
