@@ -5,9 +5,9 @@ def connect_to_db():
 
 
 product_types = [
-    "Meat", "Dairy", "Grains", "Vegetables", "Fruits", "Beans",
-    "Nuts and Seeds", "Beverages", "Bakery", "Snacks", "Canned Goods",
-    "Condiments", "Spices and Herbs", "Oils and Fats", "Sweets",
+    "🥩 Meat", "🥛 Dairy", "🍚 Grains", "🥦 Vegetables", "🍌 Fruits", "🫘 Beans",
+    "🥜 Nuts and Seeds", "🧋 Beverages", "🥐 Bakery", "🍿 Snacks", "🥫 Canned Goods",
+    "🧂 Condiments", "🌿 Spices and Herbs", "🧈 Oils and Fats", "🍩 Sweets",
 ]
 
 create_table_query = """

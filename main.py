@@ -152,7 +152,7 @@ if __name__ == '__main__' :
             elif callback.data == 'choice_generate':
                 try:
                     completion = openai.chat.completions.create(
-                        model="gpt-3.5-turbo",
+                        model="gpt-4o-mini",
                         messages=[
                             {
                                 "role": "system",
@@ -431,12 +431,44 @@ if __name__ == '__main__' :
     # Select by supplier
 
     def select_by_supplier(message):
-        pass
+        supplier = message.text
+        markup_remove = types.ReplyKeyboardRemove()
+
+        list_of_products = db_manager.inspect_by_supplier(supplier)
+
+        if not list_of_products:
+            bot.send_message(message.chat.id, f"No products of type \"{supplier}\" were found", reply_markup=markup_remove)
+            return
+        
+        markup_inline = types.InlineKeyboardMarkup(row_width=2)
+        for product in list_of_products:
+            product_id = product[0][0]
+            product_name = product[0][1]
+            product_supplier = product[0][3]
+            markup_inline.add(types.InlineKeyboardButton(f'{product_name} by "{product_supplier}"', callback_data=f"product_{product_id}"))
+        bot.send_message(message.chat.id, "Pick a product to add to the cart:", reply_markup=markup_inline)
+
 
     # Select by name
 
     def select_by_name(message):
-        pass
+        name = message.text
+        markup_remove = types.ReplyKeyboardRemove()
+
+        list_of_products = db_manager.inspect_by_name(name)
+
+        if not list_of_products:
+            bot.send_message(message.chat.id, f"No products of name \"{name}\" were found", reply_markup=markup_remove)
+            return
+        
+        markup_inline = types.InlineKeyboardMarkup(row_width=2)
+        for product in list_of_products:
+            product_id = product[0][0]
+            product_name = product[0][1]
+            product_supplier = product[0][3]
+            markup_inline.add(types.InlineKeyboardButton(f'{product_name} by "{product_supplier}"', callback_data=f"product_{product_id}"))
+        bot.send_message(message.chat.id, "Pick a product to add to the cart:", reply_markup=markup_inline)
+
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith("product_"))
     def add_products_to_cart(callback):
