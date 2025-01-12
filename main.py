@@ -1,8 +1,10 @@
 import telebot
 from telebot import types
 import openai
-import db_manager, admin
+import json
+import db_manager, admin, prompt_str
 from datetime import datetime
+
 
 BOT_TOKEN = admin.os.getenv("BOT_TOKEN")
 OPENAI_API_KEY = admin.os.getenv("OPENAI_API_KEY")
@@ -10,6 +12,7 @@ OPENAI_API_KEY = admin.os.getenv("OPENAI_API_KEY")
 bot = telebot.TeleBot(BOT_TOKEN)
 client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
+chunk_size = 7
 
 if __name__ == '__main__' :
 
@@ -151,30 +154,73 @@ if __name__ == '__main__' :
                     bot.send_message(callback.message.chat.id, '<b>The cart is currently empty</b>', parse_mode="HTML", reply_markup=markup)                
             elif callback.data == 'choice_generate':
                 try:
-                    completion = openai.chat.completions.create(
-                        model="gpt-4o-mini",
-                        messages=[
-                            {
-                                "role": "system",
-                                "content": """
-                                You are a recipe generator. I will provide a JSON file with a list of products with nutritional data. You generate a recipe using all the products from the JSON, along with your suggested ones to create a dish. Ensure the recipe is realistic, creative, and easy to follow.
-
-                                Your output must include the following sections:
-                                1. Recipe Title - A short and descriptive title for the recipe.
-                                2. Ingredients - List all ingredients used in the recipe and specifu their mass or amount.
-                                3. Instructions - Provide 4-6 simple steps to prepare the recipe.
-                                4. Nutrition data per Serving
-                                5. Highlight each section.
-                                """
-                            },
-                            {"role": "user", "content": str(current_cart_data)}
-                        ],
-    )
-                    recipe = completion.choices[0].message.content
-                    bot.send_message(callback.message.chat.id, recipe)
+                    # Format the recipe using the JSON data
+                    recipe = generate_recipe(str(current_cart_data))
+                    recipe = format_recipe(recipe)
+                    bot.send_message(callback.message.chat.id, recipe, parse_mode="HTML")
                 except Exception as e:
                     bot.send_message(callback.message.chat.id, f"An error occurred: {str(e)}")
 
+    def format_recipe(data):
+    # Parse JSON data
+        try:
+            recipe_data = json.loads(data)
+        except json.JSONDecodeError:
+            return "Invalid recipe data. Please provide valid JSON."
+
+        # Extract title and nutrients
+        dish_title = recipe_data.get("dish_title", "Untitled Recipe")
+        nutrients = recipe_data.get("nutrients", {})
+
+        # Format nutrients
+        nutrients_text = "\n".join([
+            f"- Calories: {nutrients.get('calories', 'N/A')} kcal",
+            f"- Proteins: {nutrients.get('proteins', 'N/A')} g",
+            f"- Carbs: {nutrients.get('carbs', 'N/A')} g",
+            f"- Sugars: {nutrients.get('sugars', 'N/A')} g",
+            f"- Fats: {nutrients.get('fats', 'N/A')} g",
+            f"- Fiber: {nutrients.get('fiber', 'N/A')} g"
+        ])
+
+        # Format ingredients
+        ingredients = recipe_data.get("ingredients", [])
+        ingredients_text = "\n".join([
+            f"- {ingredient.get('quantity', '')} {ingredient.get('dish_name', '')} ({ingredient.get('mass', 'N/A')} g)"
+            for ingredient in ingredients
+        ])
+
+        # Format instructions
+        instructions = recipe_data.get("instructions", [])
+        instructions_text = "\n".join([
+            f"Step {instruction['step']}: {instruction['step_title']}\n{instruction['description']}"
+            for instruction in instructions
+        ])
+
+        # Combine all parts
+        recipe_text = (
+            f"🍲 <b>{dish_title}</b>\n\n"
+            f"<b>Ingredients:</b>\n{ingredients_text}\n\n"
+            f"<b>Instructions:</b>\n{instructions_text}\n\n"
+            f"<b>Nutritional Information:</b>\n{nutrients_text}"
+        )
+
+        return recipe_text
+    
+    def generate_recipe(data):
+        prompt = prompt_str.RecipeGeneration.recipe_generation_prompt()
+
+        response = client.beta.chat.completions.parse(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a good cook."},
+                {"role": "user", "content": prompt},
+                {"role": "system", "content": data}
+            ],
+            response_format=prompt_str.Recipe,
+            temperature=0.5
+        )
+        
+        return response.choices[0].message.content
 
     ## Add product to cart
 
@@ -192,7 +238,9 @@ if __name__ == '__main__' :
     def cancel_add_product(callback):
         if callback.message:
             selected_products.clear()
-            current_cart_data.clear()
+            current_cart_data["Products"].clear()
+            bot.delete_message(callback.message.chat.id, callback.message.message_id)
+
             bot.send_message(callback.message.chat.id, "<b>The cart is now empty!</b>", parse_mode="HTML")
 
 
@@ -298,35 +346,39 @@ if __name__ == '__main__' :
         list_of_products = db_manager.inspect_by_type(type)
 
         if not list_of_products:
-            bot.send_message(message.chat.id, f"No products of type \"{type}\" were found")
+            bot.send_message(message.chat.id, f"No products of type \"{type}\" were found", reply_markup=markup_remove)
             return
-
-        response = f"<b>Selected by type \"{type}\":</b>\n"
         
-        for product in list_of_products:
-            product_name = product[0][1]
-            product_supplier = product[0][3]
-            product_type = product[0][2]
-            product_calories = product[0][4]
-            product_proteins = product[1][0]
-            product_carbs = product[1][1]
-            product_sugars = product[1][2]
-            product_fats = product[1][3]
-            product_fibers = product[1][4]
+        num_chunks = len(list_of_products) // chunk_size + (1 if len(list_of_products) % chunk_size != 0 else 0)
 
-            response += f"""
-            <b>Name:</b> {product_name}
-            <b>Supplier:</b> {product_supplier}
-            <b>Type:</b> {product_type}
-            <b>Calories:</b> {product_calories}
-            <b>Proteins:</b> {product_proteins}
-            <b>Carbs:</b> {product_carbs}
-            \tfrom which <b>sugars:</b> {product_sugars}
-            <b>Fats:</b> {product_fats}
-            <b>Fibers:</b> {product_fibers}\n
-            """
-        
-        bot.send_message(message.chat.id, response, parse_mode="HTML", reply_markup=markup_remove)
+        for i in range(num_chunks):
+            response = f"<b>Selected by type \"{type}\":</b>\n"
+            chunk = list_of_products[i * chunk_size:(i + 1) * chunk_size]
+
+            for product in chunk:
+                product_name = product[0][1]
+                product_supplier = product[0][3]
+                product_type = product[0][2]
+                product_calories = product[0][4]
+                product_proteins = product[1][0]
+                product_carbs = product[1][1]
+                product_sugars = product[1][2]
+                product_fats = product[1][3]
+                product_fibers = product[1][4]
+
+                response += f"""
+                <b>Name:</b> {product_name}
+                <b>Supplier:</b> {product_supplier}
+                <b>Type:</b> {product_type}
+                <b>Calories:</b> {product_calories}
+                <b>Proteins:</b> {product_proteins}
+                <b>Carbs:</b> {product_carbs}
+                \tfrom which <b>sugars:</b> {product_sugars}
+                <b>Fats:</b> {product_fats}
+                <b>Fibers:</b> {product_fibers}\n
+                """
+
+            bot.send_message(message.chat.id, response, parse_mode="HTML", reply_markup=markup_remove if i == num_chunks - 1 else None)
 
 
     # Search by supplier
@@ -338,35 +390,40 @@ if __name__ == '__main__' :
         list_of_products = db_manager.inspect_by_supplier(supplier)
 
         if not list_of_products:
-            bot.send_message(message.chat.id, f"No products of type \"{supplier}\" were found")
+            bot.send_message(message.chat.id, f"No products from supplier \"{supplier}\" were found", reply_markup=markup_remove)
             return
 
-        response = f"<b>Selected by supplier \"{supplier}\":</b>\n"
-        
-        for product in list_of_products:
-            product_name = product[0][1]
-            product_supplier = product[0][3]
-            product_type = product[0][2]
-            product_calories = product[0][4]
-            product_proteins = product[1][0]
-            product_carbs = product[1][1]
-            product_sugars = product[1][2]
-            product_fats = product[1][3]
-            product_fibers = product[1][4]
+        num_chunks = len(list_of_products) // chunk_size + (1 if len(list_of_products) % chunk_size != 0 else 0)
 
-            response += f"""
-            <b>Name:</b> {product_name}
-            <b>Supplier:</b> {product_supplier}
-            <b>Type:</b> {product_type}
-            <b>Calories:</b> {product_calories}
-            <b>Proteins:</b> {product_proteins}
-            <b>Carbs:</b> {product_carbs}
-            \tfrom which <b>sugars:</b> {product_sugars}
-            <b>Fats:</b> {product_fats}
-            <b>Fibers:</b> {product_fibers}\n
-            """
-        
-        bot.send_message(message.chat.id, response, parse_mode="HTML", reply_markup=markup_remove)
+        for i in range(num_chunks):
+            response = f"<b>Selected by supplier \"{supplier}\":</b>\n"
+            chunk = list_of_products[i * chunk_size:(i + 1) * chunk_size]
+
+            for product in chunk:
+                product_name = product[0][1]
+                product_supplier = product[0][3]
+                product_type = product[0][2]
+                product_calories = product[0][4]
+                product_proteins = product[1][0]
+                product_carbs = product[1][1]
+                product_sugars = product[1][2]
+                product_fats = product[1][3]
+                product_fibers = product[1][4]
+
+                response += f"""
+                <b>Name:</b> {product_name}
+                <b>Supplier:</b> {product_supplier}
+                <b>Type:</b> {product_type}
+                <b>Calories:</b> {product_calories}
+                <b>Proteins:</b> {product_proteins}
+                <b>Carbs:</b> {product_carbs}
+                \tfrom which <b>sugars:</b> {product_sugars}
+                <b>Fats:</b> {product_fats}
+                <b>Fibers:</b> {product_fibers}\n
+                """
+
+            bot.send_message(message.chat.id, response, parse_mode="HTML", reply_markup=markup_remove if i == num_chunks - 1 else None)
+
 
     # Search by name
 
@@ -377,35 +434,40 @@ if __name__ == '__main__' :
         list_of_products = db_manager.inspect_by_name(name)
 
         if not list_of_products:
-            bot.send_message(message.chat.id, f"No products of name \"{name}\" were found")
+            bot.send_message(message.chat.id, f"No products of name \"{name}\" were found", reply_markup=markup_remove)
             return
-
-        response = f"<b>Selected by name \"{name}\":</b>\n"
         
-        for product in list_of_products:
-            product_name = product[0][1]
-            product_supplier = product[0][3]
-            product_type = product[0][2]
-            product_calories = product[0][4]
-            product_proteins = product[1][0]
-            product_carbs = product[1][1]
-            product_sugars = product[1][2]
-            product_fats = product[1][3]
-            product_fibers = product[1][4]
+        num_chunks = len(list_of_products) // chunk_size + (1 if len(list_of_products) % chunk_size != 0 else 0)
 
-            response += f"""
-            <b>Name:</b> {product_name}
-            <b>Supplier:</b> {product_supplier}
-            <b>Type:</b> {product_type}
-            <b>Calories:</b> {product_calories}
-            <b>Proteins:</b> {product_proteins}
-            <b>Carbs:</b> {product_carbs}
-            \tfrom which <b>sugars:</b> {product_sugars}
-            <b>Fats:</b> {product_fats}
-            <b>Fibers:</b> {product_fibers}\n
-            """
-        
-        bot.send_message(message.chat.id, response, parse_mode="HTML", reply_markup=markup_remove)
+        for i in range(num_chunks):
+            response = f"<b>Selected by name \"{name}\":</b>\n"
+            chunk = list_of_products[i * chunk_size:(i + 1) * chunk_size]
+
+            for product in chunk:
+                product_name = product[0][1]
+                product_supplier = product[0][3]
+                product_type = product[0][2]
+                product_calories = product[0][4]
+                product_proteins = product[1][0]
+                product_carbs = product[1][1]
+                product_sugars = product[1][2]
+                product_fats = product[1][3]
+                product_fibers = product[1][4]
+
+                response += f"""
+                <b>Name:</b> {product_name}
+                <b>Supplier:</b> {product_supplier}
+                <b>Type:</b> {product_type}
+                <b>Calories:</b> {product_calories}
+                <b>Proteins:</b> {product_proteins}
+                <b>Carbs:</b> {product_carbs}
+                \tfrom which <b>sugars:</b> {product_sugars}
+                <b>Fats:</b> {product_fats}
+                <b>Fibers:</b> {product_fibers}\n
+                """
+
+            bot.send_message(message.chat.id, response, parse_mode="HTML", reply_markup=markup_remove if i == num_chunks - 1 else None)
+
 
     # Select by type
 
