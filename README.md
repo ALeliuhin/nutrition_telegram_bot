@@ -48,6 +48,10 @@ This bot is designed to help users easily manage and explore nutrition data for 
 
       ```bash
       pip install pyTelegramBotAPI
+      
+      pip install openai
+
+      pip install pydantic
       ```
 
 3. **Configure your bot**:
@@ -67,6 +71,10 @@ This bot is designed to help users easily manage and explore nutrition data for 
 1. **Start the bot**: Once you have set up the bot, you can find it on Telegram and start interacting with it using `/start`.
 2. **Admin functions**: If you are an admin, you will have access to additional commands to interact with the database.
 3. **Suggestions**: Any user can suggest new products, which will be reviewed and possibly added to the database.
+4. **Product lookup**: Search for a product by name and view its detailed nutritional information.
+5. **Meal composition**: Select products and combine them to create a meal.
+6. **Recipe generation**: Generate a recipe using selected products via OpenAI API.
+7. **Supplier information**: Easily manage supplier names and their related products.
 
 ---
 
@@ -74,7 +82,10 @@ This bot is designed to help users easily manage and explore nutrition data for 
 
 - **Products**: Stores all products with their respective nutritional information.
 - **Suppliers**: Keeps track of supplier names and associates them with products.
+- **Types**: Contains product types (e.g., fruits, vegetables, dairy).
 - **Nutrition Info**: Detailed nutrition information (calories, proteins, carbs, etc.) for each product.
+- **User Suggestions**: Stores user suggestions for new products to be added to the database.
+- **LoginData**: Contains login information for users.
 
 ---
 
